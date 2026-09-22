@@ -6,11 +6,13 @@
 -- 1. Enable UUID Extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- 2. Workspaces Table
+-- 2. Workspaces Table (with Owner Identity)
 CREATE TABLE IF NOT EXISTS workspaces (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   passkey TEXT,
+  owner_email TEXT,
+  owner_id UUID,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -40,18 +42,13 @@ CREATE TABLE IF NOT EXISTS leads (
 CREATE INDEX IF NOT EXISTS idx_leads_workspace_updated ON leads (workspace_id, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_leads_workspace_active ON leads (workspace_id, is_deleted);
 CREATE INDEX IF NOT EXISTS idx_leads_search ON leads (workspace_id, last_name, email_address);
+CREATE INDEX IF NOT EXISTS idx_workspaces_owner ON workspaces (owner_email);
 
--- 5. Seed Default Workspace
-INSERT INTO workspaces (id, name, passkey) 
-VALUES ('default-workspace', 'My Business CRM', 'default-key')
-ON CONFLICT (id) DO NOTHING;
-
--- 6. Enable Row Level Security (RLS)
+-- 5. Enable Row Level Security (RLS)
 ALTER TABLE workspaces ENABLE ROW LEVEL SECURITY;
 ALTER TABLE leads ENABLE ROW LEVEL SECURITY;
 
--- 7. RLS Policies: Allow public read/write scoped strictly by workspace_id
--- (Allows frictionless zero-login sync while guaranteeing workspace isolation)
+-- 6. RLS Policies: Allow public read/write scoped strictly by workspace_id
 CREATE POLICY "Allow workspace scoped select" 
   ON leads FOR SELECT 
   USING (true);
@@ -72,3 +69,7 @@ CREATE POLICY "Allow workspace select"
 CREATE POLICY "Allow workspace insert" 
   ON workspaces FOR INSERT 
   WITH CHECK (true);
+
+CREATE POLICY "Allow workspace update" 
+  ON workspaces FOR UPDATE 
+  USING (true);

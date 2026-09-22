@@ -4,29 +4,63 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { PlusCircle, LayoutDashboard, Hexagon } from 'lucide-react';
+import { PlusCircle, LayoutDashboard, Hexagon, Loader2 } from 'lucide-react';
 import LeadCaptureForm from './components/LeadCaptureForm';
 import LeadDashboard from './components/LeadDashboard';
 import { PWAInstallButton } from './components/PWAInstallButton';
 import { WorkspaceHeader } from './components/WorkspaceHeader';
+import { OnboardingScreen } from './components/OnboardingScreen';
 import { workspaceService } from './services/workspaceService';
+import type { Workspace } from './types';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'capture' | 'dashboard'>('dashboard');
   const [refreshKey, setRefreshKey] = useState(0);
+  const [isLoadingWorkspace, setIsLoadingWorkspace] = useState(true);
+  const [hasWorkspace, setHasWorkspace] = useState(false);
 
   useEffect(() => {
-    // Check if the user navigated here via a cross-device pairing link
+    // 1. Check if user arrived via a pairing link (/#sync=...)
     workspaceService.checkAndApplyPairingHash().then(ws => {
       if (ws) {
-        setRefreshKey(k => k + 1);
+        setHasWorkspace(true);
+        setIsLoadingWorkspace(false);
+        return;
       }
+
+      // 2. Check if user already has an active workspace on this device
+      workspaceService.hasActiveWorkspace().then(exists => {
+        setHasWorkspace(exists);
+        setIsLoadingWorkspace(false);
+      });
     });
   }, []);
 
-  const handleWorkspaceChanged = () => {
+  const handleWorkspaceReady = (ws: Workspace) => {
+    setHasWorkspace(true);
     setRefreshKey(k => k + 1);
   };
+
+  const handleWorkspaceChanged = () => {
+    workspaceService.hasActiveWorkspace().then(exists => {
+      setHasWorkspace(exists);
+      setRefreshKey(k => k + 1);
+    });
+  };
+
+  // Initial loader while inspecting local device storage
+  if (isLoadingWorkspace) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center text-zinc-400">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+      </div>
+    );
+  }
+
+  // First-time start-up screen if no active workspace exists on this device
+  if (!hasWorkspace) {
+    return <OnboardingScreen onWorkspaceReady={handleWorkspaceReady} />;
+  }
 
   return (
     <div className="min-h-screen bg-zinc-50 font-sans text-zinc-900 selection:bg-blue-100 selection:text-emerald-900">

@@ -29,6 +29,8 @@ export interface Workspace {
   id: string;
   name: string;
   passkey: string;
+  ownerEmail?: string;
+  ownerId?: string;
   createdAt: string;
   lastSyncedAt?: string;
 }

@@ -37,3 +37,12 @@ Browser Client (PWA on Device Disk)
 - **Offline First**: All user actions (creates, updates, deletes, Excel exports) complete in <2ms on device disk.
 - **Auto Reconnection**: Listens for browser `online` events to automatically flush pending changes to Supabase.
 - **Zero Configuration Fallback**: If no Supabase URL/Key is configured, the application functions autonomously in 100% local mode.
+
+## 5. Startup Lifecycle & Onboarding Gate
+1. **First-Time Visitors**:
+   - Gated behind `OnboardingScreen`. The CRM dashboard and capture forms are hidden until a workspace is created or joined.
+   - **Creation Flow**: Requires Business Name + Owner Email Address. A 6-digit OTP code sent via Supabase Auth confirms ownership before creation, binding the workspace to the verified owner.
+   - **Join Flow**: Frictionless entry using Workspace ID + Passkey (or One-Click Pairing Link) without email OTP requirements.
+2. **Returning Users**:
+   - Automatically recognized on launch from local device storage.
+   - Onboarding is bypassed directly to the active CRM dashboard with zero delay.

@@ -9,6 +9,7 @@
 ## Process
 1. Verify the React 19 + Tailwind CSS v4 frontend component structure in `src/`.
 2. Inspect the responsive layout across desktop and mobile form factors:
+   - `OnboardingScreen`: First-time startup gate for creating (with email OTP verification) or joining a workspace.
    - Header with navigation tabs and `PWAInstallButton`.
    - `LeadCaptureForm`: Multi-field contact form with partner disclosure toggle and real-time field error indicators.
    - `LeadDashboard`: Searchable directory with live filter, edit modal, and Excel download action.
@@ -16,6 +17,6 @@
 4. Generate the frontend architecture and build verification report.
 
 ## Outputs
-- `src/`: Production frontend application components.
+- `src/`: Production frontend application components (including `OnboardingScreen.tsx`).
 - `output/frontend_build_report.md`: Component hierarchy, responsive breakpoint validation, and PWA capabilities summary.
-- **Review Gate**: Confirm responsive desktop and mobile UX, instant client-side validation feedback, and functional Excel export integration.
+- **Review Gate**: Confirm first-time onboarding gate, responsive desktop and mobile UX, instant client-side validation feedback, and functional Excel export integration.

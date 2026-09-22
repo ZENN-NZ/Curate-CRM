@@ -15,6 +15,13 @@
   1. Workspace pairing requires both `workspace_id` and a high-entropy secret `passkey`.
   2. Pairing URLs passed in the browser hash (`/#sync=...`) are stripped from the browser URL bar immediately after local ingestion to prevent shoulder-surfing or browser history leakage.
 
+### 1.3 Workspace Creation Identity Verification (Email OTP)
+- **Vulnerability**: Unverified spam creation of cloud workspaces and unauthorized claiming of business identifiers.
+- **Mandatory Control**:
+  1. Creating a brand-new workspace mandates owner email verification using a 6-digit One-Time Password (OTP) dispatched via Supabase Auth (`supabase.auth.signInWithOtp` and `verifyOtp`).
+  2. The verified workspace record retains `owner_email` and `owner_id` (Supabase Auth UID).
+  3. Joining an existing workspace (via pairing link or workspace ID + passkey) requires zero email friction to preserve rapid cross-device pairing.
+
 ---
 
 ## 2. Threat Mitigation Mandates
