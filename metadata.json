@@ -1,0 +1,6 @@
+{
+  "name": "Curate",
+  "description": "A curated relationship and contact management application with SQLite database and formatted Excel export.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
