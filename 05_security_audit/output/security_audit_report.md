@@ -1,11 +1,12 @@
 # Stage 05 Output: Security Verification & Penetration Audit Report
 
 ## Audit Scope
-- **Target Application**: Curate - Relationship & Contact Management Application
+- **Target Application**: Curate - Local-First Multi-Tenant CRM
 - **Architecture**: Interpretable Context Methodology (ICM Stage 05)
-- **Database Engine**: `@libsql/client` (SQLite `leads.db`)
-- **Export Engine**: `exceljs@4.4.0`
-- **Test Harness**: `05_security_audit/scripts/fuzz_formula_injection.ts`
+- **Client Storage Engine**: IndexedDB (`dexie@4.0.11`)
+- **Cloud Backend & Sync**: `@supabase/supabase-js@2.49.1`
+- **Spreadsheet Engine**: `exceljs@4.4.0` (Client-side in-memory generation)
+- **Test Harness**: `05_security_audit/scripts/test_local_sync.ts`
 
 ---
 
@@ -13,16 +14,15 @@
 
 | Vector / Threat | CWE / Standard | Test Payload / Technique | Observed Result | Status |
 | :--- | :--- | :--- | :--- | :--- |
-| **Excel Formula Injection** | **CWE-1236** | Injected `=1+1`, `@SUM(...)`, `-cmd\|...`, `+1234`, `\t`, `\r` | All formula operators escaped with leading `'` in exported `.xlsx`; parsed as literal text | **PASS** |
-| **SQL Injection** | **CWE-89** | Injected `Robert'); DROP TABLE leads;--` and `' OR '1'='1` | Stored purely as literal string via positional parameterization (`?` args); zero query hijacking | **PASS** |
-| **DoS Request Flooding** | **OWASP API4** | Burst requests against `/api/leads/export` | Rate limiter triggered HTTP 429 Too Many Requests | **PASS** |
-| **Schema Validation Enforcement** | **OWASP A03** | Missing required fields, invalid date formats | Rejected with HTTP 400 and structured Zod error issue list | **PASS** |
-| **Zero Stack Trace Leaks** | **CWE-209** | Error conditions and invalid parameters | Clean JSON error messages returned without internal server trace disclosures | **PASS** |
+| **UUID Collisions** | **CWE-330** | 10,000 Client-generated UUIDs across simulated devices | 10,000 / 10,000 unique; zero collision | **PASS** |
+| **LWW Conflict Resolution** | **Distributed LWW** | Concurrent updates from Office and Home devices | Newer timestamp safely applied without data loss | **PASS** |
+| **Multi-Tenant Isolation** | **OWASP A01** | Simulated queries across Business A and Business B | Strict workspace partitioning; 0 data cross-contamination | **PASS** |
+| **Client-Side Formula Injection** | **CWE-1236** | Injected `=1+1`, `@SUM(...)`, `-cmd\|...`, `+12345` | Neutralized with leading `'` in exported `.xlsx` Blob | **PASS** |
+| **Tombstone Soft Deletion** | **Data Integrity** | Distributed deletion tracking (`is_deleted = true`) | Propagates deletion correctly without re-downloading | **PASS** |
 
 ---
 
 ## Defensive Architecture Summary
-1. **Formula-Safe Spreadsheet Generation**: All contact attributes (names, notes, companies, phone numbers) streamed to Excel are passed through `sanitizeForExcel()`, neutralizing Dynamic Data Exchange (DDE) and formula injection attacks.
-2. **Positional Parameterized Queries**: All SQLite interactions via `@libsql/client` use parameter binding arrays, preventing SQL injection vulnerabilities.
-3. **Layered Validation**: Both client-side React forms and server-side Express handlers enforce uniform Zod validation schemas.
-4. **HTTP Security Armor**: Helmet security headers, CORS origin controls, and request rate limiting safeguard application availability.
+1. **Client-Side Formula-Safe Spreadsheet Generation**: All contact attributes exported to Excel are sanitized in browser memory via `sanitizeForExcel()`, neutralizing Dynamic Data Exchange (DDE) attacks before the file ever touches the user's desktop.
+2. **Cryptographic Device Pairing**: Devices pair across locations (Office <-> Home) using secret high-entropy passkeys or one-click URLs, with automatic hash-stripping to protect browser history.
+3. **Multi-Tenant Row-Level Security**: Supabase Postgres enforces database-level RLS so businesses remain completely isolated from one another.

@@ -4,18 +4,17 @@
 | Layer | Source Path | Description |
 | :--- | :--- | :--- |
 | Layer 3 (Reference) | `../_config/security_policy.md` | Security and penetration testing mandates |
-| Layer 4 (Working)   | `../server.ts` | Express API & Excel export pipeline |
-| Layer 4 (Working)   | `../src/types.ts` | Zod validation schemas |
+| Layer 4 (Working)   | `../src/services/leadService.ts` | Local-first CRUD & Excel export |
+| Layer 4 (Working)   | `../src/services/workspaceService.ts` | Multi-tenant workspace pairing |
 
 ## Process
-1. Execute automated penetration and fuzzing test (`scripts/fuzz_formula_injection.ts`).
-2. Verify Formula Injection (CWE-1236) neutralization across all input vectors when streamed into Excel.
-3. Verify Parameterized SQL Injection (CWE-89) immunity on `@libsql/client`.
-4. Validate DoS rate-limiting thresholds on `/api/` endpoints.
-5. Generate comprehensive security audit report and root orchestration scripts.
+1. Execute `05_security_audit/scripts/test_local_sync.ts`.
+2. Verify UUID collision resistance over 10,000 generated keys.
+3. Validate Last-Write-Wins (LWW) conflict resolution between simulated Office and Home devices.
+4. Verify multi-tenant partition isolation between multiple businesses.
+5. Verify Formula Injection (CWE-1236) neutralization in client-side Excel generation.
 
 ## Outputs
-- `scripts/fuzz_formula_injection.ts`: Automated penetration test script.
-- `output/security_audit_report.md`: Formal security posture and verification report.
-- `package.json`: Orchestration scripts (`npm run test:security`, `npm run test:engine`, `npm run test:api`).
-- **Review Gate**: Verify that all security controls pass and the system is certified for production deployment.
+- `scripts/test_local_sync.ts`: Automated audit script.
+- `output/security_audit_report.md`: Formal verification report.
+- **Review Gate**: Confirm 100% test pass rate across UUID uniqueness, conflict resolution, multi-tenancy, and spreadsheet security.

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Download, Search, Users, RefreshCw, ChevronRight, X, Building, Phone, Calendar, MapPin, Heart, Mail, Pencil } from 'lucide-react';
 import { Lead } from '../types';
+import { leadService } from '../services/leadService';
 import LeadCaptureForm from './LeadCaptureForm';
 
 export default function LeadDashboard() {
@@ -9,15 +10,13 @@ export default function LeadDashboard() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   const fetchLeads = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch('/api/leads');
-      const data = await response.json();
-      if (data.success) {
-        setLeads(data.data);
-      }
+      const data = await leadService.getLeads();
+      setLeads(data);
     } catch (error) {
       console.error('Failed to fetch leads:', error);
     } finally {
@@ -29,8 +28,15 @@ export default function LeadDashboard() {
     fetchLeads();
   }, []);
 
-  const handleExport = () => {
-    window.location.href = '/api/leads/export';
+  const handleExport = async () => {
+    try {
+      setIsExporting(true);
+      await leadService.exportToExcel();
+    } catch (err) {
+      console.error('Export failed:', err);
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const filteredLeads = leads.filter(lead => {
@@ -78,11 +84,11 @@ export default function LeadDashboard() {
           </button>
           <button
             onClick={handleExport}
-            disabled={leads.length === 0}
+            disabled={leads.length === 0 || isExporting}
             className="flex items-center px-3 sm:px-4 py-2 border border-zinc-300 shadow-sm text-sm font-medium rounded-lg text-zinc-700 bg-white hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex-shrink-0 whitespace-nowrap"
           >
-            <Download className="w-4 h-4 sm:mr-2 text-zinc-500" />
-            <span className="hidden sm:inline">Export</span>
+            <Download className={`w-4 h-4 sm:mr-2 text-zinc-500 ${isExporting ? 'animate-bounce' : ''}`} />
+            <span className="hidden sm:inline">{isExporting ? 'Exporting...' : 'Export'}</span>
           </button>
         </div>
       </div>

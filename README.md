@@ -1,32 +1,37 @@
-# Curate - Relationship & Contact Management Web App
+# Curate - Local-First Multi-Tenant CRM
 
-A modern, responsive, and cross-platform Relationship & Contact Management Web App backed by a local SQLite database (`leads.db`) and Excel export engine (`exceljs`). Structured and maintained using the **Interpretable Context Methodology (ICM)** (arXiv:2603.16021v2) and fortified with **enterprise security standards** (Formula injection defense, parameterized SQL, IP rate-limiting, and PWA capabilities).
+A modern, responsive, and cross-platform Relationship & Contact Management Progressive Web App (PWA). Built on the **Interpretable Context Methodology (ICM)** (arXiv:2603.16021v2) and architected with a **Local-First (Offline-First) + Supabase Cloud Sync** foundation.
 
 ---
 
 ## Key Features
 
-1. **App-Like Cross-Platform Experience**:
-   - Modern, clean UI built with React 19, Tailwind CSS v4, Motion, and Lucide icons.
-   - Fully responsive for mobile devices, tablets, and desktop workstations.
-   - Dual interface:
-     - **Contact Directory Dashboard**: Real-time multi-field search, responsive table/card views, inline contact editing modal, and live Excel export.
-     - **Add Contact Form**: Comprehensive multi-section form capturing identity, contact coordinates, residential address, company, and optional partner details.
-   - **Progressive Web App (PWA)**: In-browser install button and web app manifest for standalone mobile/desktop installation.
+1. **Local-First Architecture (0ms Latency, 100% Offline)**:
+   - All contact creation, editing, and searches execute immediately against the user's local device disk using IndexedDB (via Dexie.js).
+   - Operates seamlessly without an internet connection (on flights, remote locations, or mobile networks).
+   - Zero server cold starts and zero network lag.
 
-2. **Local-First SQLite Engine (`leads.db`)**:
-   - High-performance local SQL database managed via `@libsql/client`.
-   - Automatic, idempotent table creation and column migrations.
-   - 100% Parameterized queries protecting against SQL injection (CWE-89).
+2. **Multi-Tenant Business Workspaces**:
+   - Supports multiple independent business databases within the same application.
+   - Run Business A with a 5-person team, and Business B as a solo consultant—in complete data isolation.
+   - Built-in **Workspace Switcher** in the top navigation bar.
 
-3. **Formatted & Formula-Sanitized Excel Export**:
-   - Styled OpenXML headers with custom branding colors and auto-fitted columns.
-   - **Formula Injection Defense (CWE-1236)**: Any contact attribute starting with formula triggers (`=`, `+`, `-`, `@`, `\t`, `\r`, `%`) is automatically neutralized with an apostrophe prefix (`'`) before writing to the workbook.
+3. **Zero-Login Cross-Device Pairing (Office <-> Home <-> Mobile)**:
+   - No usernames or passwords required.
+   - **One-Click Pairing Link**: Generate a shareable URL (`/#sync=workspaceId:passkey`) to pair a home laptop or phone in one click.
+   - **Passkey Pairing**: Enter the short workspace code on any new device to immediately pull the business database.
+   - **Last-Write-Wins (LWW)**: Automated timestamp-based conflict resolution reconciles edits made across office and home devices.
 
-4. **Rigorous Enterprise Security**:
-   - **Strict Input Validation**: All inbound write payloads pass through Zod schemas enforcing bounds, RFC email checks, and date parse verification.
-   - **DoS Rate Limiting**: `express-rate-limit` protects API endpoints against request flooding.
-   - **HTTP Armor**: Helmet security headers and CORS protection.
+4. **Client-Side Formula-Safe Excel Export**:
+   - Direct in-browser Excel generation via `exceljs` with zero server roundtrip.
+   - **Formula Injection Defense (CWE-1236)**: All exported cells are automatically sanitized, neutralizing formula operators (`=`, `+`, `-`, `@`, `\t`, `\r`, `%`) with a single-quote (`'`) prefix.
+
+5. **Cloud Synchronization (Supabase)**:
+   - Automatically pushes pending local changes and pulls remote delta updates when connected.
+   - Backed by Supabase Postgres with **Row-Level Security (RLS)** ensuring strict tenant isolation.
+
+6. **Instant Vercel Deployment**:
+   - Deploys as a 100% static PWA on Vercel's Edge Network for free with infinite scalability.
 
 ---
 
@@ -37,47 +42,76 @@ A modern, responsive, and cross-platform Relationship & Contact Management Web A
 npm install
 ```
 
-### 2. Launch Application
+### 2. Launch Local Development
 ```bash
 npm run dev
 ```
 
-This boots the unified application on:
-- **Web App**: [http://localhost:3000](http://localhost:3000)
+Open [http://localhost:3000](http://localhost:3000) in your browser. The app works immediately in local device mode.
 
 ---
 
-## Running Security & Integrity Tests
+## Setting Up Supabase Cloud Sync (Optional)
 
-- **Run Full Security Penetration & Fuzzing Suite**:
+1. Create a free project on [Supabase](https://supabase.com).
+2. Open the **SQL Editor** in your Supabase dashboard.
+3. Copy and run the contents of [supabase/schema.sql](supabase/schema.sql) (creates tables, indices, and RLS policies).
+4. In Curate, click the **Database (Supabase)** icon in the top header, paste your Project URL and Anon API Key, and click **Save & Connect**.
+   *(Alternatively, define `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in your `.env` or Vercel settings).*
+
+---
+
+## Deploying to Vercel
+
+1. Push your repository to GitHub:
+   ```bash
+   git push origin main
+   ```
+2. Import the repository into [Vercel](https://vercel.com):
+   - **Framework Preset**: Vite
+   - **Build Command**: `vite build`
+   - **Output Directory**: `dist`
+3. (Optional) Add Environment Variables in Vercel:
+   - `VITE_SUPABASE_URL`: `https://your-project.supabase.co`
+   - `VITE_SUPABASE_ANON_KEY`: `your-anon-key`
+4. Click **Deploy**. Your app is live with global CDN performance and PWA capabilities.
+
+---
+
+## Running Verification & Security Tests
+
+- **Run Local Sync, UUID & Conflict Resolution Audit**:
   ```bash
-  npm run test:security
+  npm run test:sync
   ```
-- **Test SQLite Data Engine & Excel Formula Sanitization**:
+- **Run Engine & Database Tests**:
   ```bash
   npm run test:engine
   ```
-- **Test Express API Validation & Route Security**:
+- **Run Security Fuzzing Suite**:
   ```bash
-  npm run test:api
+  npm run test:security
+  ```
+- **TypeScript Type Check**:
+  ```bash
+  npm run lint
+  ```
+- **Production Compilation**:
+  ```bash
+  npm run build
   ```
 
 ---
 
 ## ICM Workspace Architecture
 
-Following the Interpretable Context Methodology (arXiv:2603.16021v2), Curate is organized into transparent, inspectable context layers:
+Following the Interpretable Context Methodology (arXiv:2603.16021v2):
 
 - **Layer 0**: [WORKSPACE.md](WORKSPACE.md) - Global workspace identity and operational rules.
-- **Layer 1**: [ROUTING.md](ROUTING.md) - Task catalog and stage dependency map.
-- **Layer 2**: `[01-05]_stage_name/CONTEXT.md` - Explicit stage contracts (Inputs, Process, Outputs).
-- **Layer 3**: `_config/` - Persistent reference material ("The Factory"):
+- **Layer 1**: [ROUTING.md](ROUTING.md) - Stage index and dependency map.
+- **Layer 2**: `[01-05]_stage_name/CONTEXT.md` - Explicit stage contracts.
+- **Layer 3**: `_config/` - Persistent reference material:
   - [_config/architecture_spec.md](_config/architecture_spec.md)
   - [_config/security_policy.md](_config/security_policy.md)
   - [_config/data_schema.json](_config/data_schema.json)
-- **Layer 4**: `[01-05]_stage_name/output/` - Intermediate deliverables and verification reports:
-  - `01_security_threat_model/output/threat_model.md` & `validation_specs.ts`
-  - `02_secure_data_engine/output/engine_verification_report.md`
-  - `03_hardened_api/output/api_test_results.md`
-  - `04_app_frontend/output/frontend_build_report.md`
-  - `05_security_audit/output/security_audit_report.md`
+- **Layer 4**: `[01-05]_stage_name/output/` - Intermediate deliverables and verification reports.

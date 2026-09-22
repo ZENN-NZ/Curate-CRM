@@ -1,6 +1,6 @@
 /**
  * validation_specs.ts
- * Stage 01 Output: Formal validation schemas and security sanitization functions for Curate.
+ * Stage 01 Output: Formal validation schemas and security sanitization functions for Curate Local-First CRM.
  */
 
 import { z } from 'zod';
@@ -30,10 +30,11 @@ export function sanitizeForExcel(val: unknown): string {
 }
 
 /**
- * Curate Lead / Contact validation schema
+ * Curate Lead / Contact validation schema (Local-First & Multi-Tenant)
  */
 export const CurateLeadSchema = z.object({
-  id: z.number().optional(),
+  id: z.union([z.string(), z.number()]).optional(),
+  workspaceId: z.string().optional(),
   firstName: z.string().min(1, 'First name is required').max(100).transform(cleanString),
   lastName: z.string().min(1, 'Last name is required').max(100).transform(cleanString),
   dob: z.string().refine((date) => !isNaN(Date.parse(date)), {
@@ -49,6 +50,9 @@ export const CurateLeadSchema = z.object({
   partnerPhone: z.string().max(20).optional().nullable().transform(val => val ? cleanString(val) : null),
   partnerEmail: z.union([z.literal(''), z.string().email('Invalid email address')]).optional().nullable(),
   createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+  isDeleted: z.boolean().optional(),
+  syncStatus: z.enum(['synced', 'pending']).optional(),
 });
 
 export type CurateLead = z.infer<typeof CurateLeadSchema>;

@@ -1,34 +1,39 @@
 # System Architecture Specification (Layer 3: Reference)
 
 ## 1. Technical Stack
-- **Runtime**: Node.js, Express 4.x, TypeScript (executed via `tsx` in development, bundled via `esbuild` for production)
-- **Database Engine**: `@libsql/client` managing local SQLite database (`leads.db`)
-- **Excel Engine**: `exceljs` generating OpenXML workbooks with frozen headers and auto-fitted columns
-- **Security Middleware**: `helmet`, `express-rate-limit`, `cors`, `zod`
-- **Frontend**: React 19, Vite 6, Tailwind CSS v4, Lucide React, Motion, `vite-plugin-pwa`
+- **Frontend Framework**: React 19.0.1, Vite 6.2.3, TypeScript, Tailwind CSS v4.1.14, Lucide React, Motion
+- **Local Storage Engine**: IndexedDB wrapped via `dexie@4.0.11`
+- **Cloud Backend & Sync**: `@supabase/supabase-js@2.49.1` (Postgres database with Row-Level Security)
+- **Spreadsheet Generation**: `exceljs@4.4.0` (executing directly in browser memory with Blob downloads)
+- **Deployment Platform**: Vercel Edge Network (100% static PWA assets, zero serverless latency or compute cost)
 
-## 2. Component Architecture
+## 2. Distributed Architecture & Component Topology
 ```text
-Browser Client (React 19 + PWA)
-       │
-       ▼ (HTTP / JSON / Stream)
-Express REST API (server.ts)
-  ├── Middleware: Helmet + CORS + RateLimiter + Zod Validation
-  ├── Storage Layer: @libsql/client -> SQLite (leads.db)
-  └── Export Engine: ExcelJS -> Formula Sanitization -> .xlsx Binary Stream
+Browser Client (PWA on Device Disk)
+  ├── UI Shell: App.tsx + WorkspaceHeader + LeadCaptureForm + LeadDashboard
+  ├── Local Store: Dexie.js (IndexedDB)
+  │     ├── Workspaces Table (id, name, passkey, created_at)
+  │     └── Leads Table (id, workspace_id, contact fields, updated_at, is_deleted, sync_status)
+  ├── Client Export Engine: ExcelJS -> Formula Sanitizer -> .xlsx Blob download
+  └── Sync Service: Background reconciliation engine with Supabase
+        ├── Push: Unsynced local records (sync_status === 'pending') via UPSERT
+        ├── Pull: Remote delta query (updated_at > last_synced_at)
+        └── Conflict Strategy: Last-Write-Wins (LWW) timestamp resolution
 ```
 
-## 3. Data Flow
-1. **Lead Capture & Creation**:
-   `React Form -> POST /api/leads -> RateLimiter -> Zod Schema Validation -> Parameterized SQL INSERT -> leads.db`
-2. **Lead Update**:
-   `React Edit Modal -> PUT /api/leads/:id -> RateLimiter -> Zod Schema Validation -> Parameterized SQL UPDATE -> leads.db`
-3. **Directory Retrieval**:
-   `React Dashboard -> GET /api/leads -> Parameterized SQL SELECT -> JSON Mapping -> React State`
-4. **Excel Export**:
-   `Dashboard Button -> GET /api/leads/export -> SQL Query -> Formula Sanitizer (CWE-1236) -> ExcelJS Stream -> .xlsx Download`
+## 3. Multi-Tenancy & Zero-Login Device Pairing
+1. **Workspace Model**:
+   - Each business is represented by a `workspace_id` and a `passkey`.
+   - Records are partitioned in Postgres by `workspace_id`.
+2. **Device Pairing (Office <-> Home <-> Mobile)**:
+   - To link a new computer or smartphone without passwords:
+   - The user copies the One-Click Pairing Link (`/#sync=workspaceId:passkey`) or enters the Workspace Code.
+   - The target device stores the credentials in `localStorage` and IndexedDB, then initiates an initial delta pull from Supabase.
+3. **Multiple Businesses**:
+   - The user can belong to multiple workspaces (e.g. Business A and Business B).
+   - The `WorkspaceHeader` allows instantaneous switching between isolated client databases.
 
-## 4. Portability & Runtime Configuration
-- Server listens on port `3000` (or `PORT` environment variable) on `0.0.0.0`.
-- In development (`NODE_ENV !== 'production'`), Vite is attached in middleware mode (`appType: 'spa'`), allowing zero-configuration hot module replacement on a unified port.
-- In production, static assets are served from `dist/` with SPA fallback to `dist/index.html`.
+## 4. Offline Guarantees & Network Resilience
+- **Offline First**: All user actions (creates, updates, deletes, Excel exports) complete in <2ms on device disk.
+- **Auto Reconnection**: Listens for browser `online` events to automatically flush pending changes to Supabase.
+- **Zero Configuration Fallback**: If no Supabase URL/Key is configured, the application functions autonomously in 100% local mode.

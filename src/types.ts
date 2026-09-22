@@ -1,7 +1,8 @@
 import { z } from "zod";
 
 export const LeadSchema = z.object({
-  id: z.number().optional(),
+  id: z.union([z.string(), z.number()]).optional(),
+  workspaceId: z.string().optional(),
   firstName: z.string().min(1, "First name is required").max(100),
   lastName: z.string().min(1, "Last name is required").max(100),
   dob: z.string().refine((date) => !isNaN(Date.parse(date)), {
@@ -17,9 +18,20 @@ export const LeadSchema = z.object({
   partnerPhone: z.string().max(20).optional().nullable(),
   partnerEmail: z.union([z.literal(''), z.string().email("Invalid email address")]).optional().nullable(),
   createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+  isDeleted: z.boolean().optional(),
+  syncStatus: z.enum(['synced', 'pending']).optional(),
 });
 
 export type Lead = z.infer<typeof LeadSchema>;
+
+export interface Workspace {
+  id: string;
+  name: string;
+  passkey: string;
+  createdAt: string;
+  lastSyncedAt?: string;
+}
 
 export type ApiResponse<T> = {
   success: boolean;

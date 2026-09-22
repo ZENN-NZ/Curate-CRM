@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { User, Calendar, MapPin, Phone, Building, CheckCircle, AlertCircle, Loader2, Heart, Mail } from 'lucide-react';
 import { LeadSchema, Lead } from '../types';
+import { leadService } from '../services/leadService';
 
 interface LeadCaptureFormProps {
   onSuccess: () => void;
@@ -50,6 +51,8 @@ export default function LeadCaptureForm({ onSuccess, onCancel, initialData }: Le
     try {
       const dataToValidate = {
         ...formData,
+        id: initialData?.id,
+        createdAt: initialData?.createdAt,
         partnerName: hasPartner ? formData.partnerName : null,
         partnerDob: hasPartner ? formData.partnerDob : null,
         partnerPhone: hasPartner ? formData.partnerPhone : null,
@@ -57,45 +60,21 @@ export default function LeadCaptureForm({ onSuccess, onCancel, initialData }: Le
       };
 
       LeadSchema.parse(dataToValidate);
-      
       setIsSubmitting(true);
-      
-      const endpoint = initialData?.id ? `/api/leads/${initialData.id}` : '/api/leads';
-      const method = initialData?.id ? 'PUT' : 'POST';
 
-      const response = await fetch(endpoint, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(dataToValidate)
-      });
-      
-      const data = await response.json();
-      
-      if (data.success) {
-        setSubmitSuccess(true);
-        setTimeout(() => {
-          setSubmitSuccess(false);
-          setFormData({
-            firstName: '', lastName: '', dob: '', residentialAddress: '',
-            postalCode: '', mobileNumber: '', emailAddress: '', companyName: '', 
-            partnerName: '', partnerDob: '', partnerPhone: '', partnerEmail: ''
-          });
-          setHasPartner(false);
-          onSuccess();
-        }, 2000);
-      } else {
-        if (data.issues) {
-          const fieldErrors: Record<string, string> = {};
-          data.issues.forEach((issue: any) => {
-            if (issue.path[0]) {
-              fieldErrors[issue.path[0]] = issue.message;
-            }
-          });
-          setErrors(fieldErrors);
-        } else {
-          setSubmitError(data.error || 'Failed to submit form');
-        }
-      }
+      await leadService.saveLead(dataToValidate);
+
+      setSubmitSuccess(true);
+      setTimeout(() => {
+        setSubmitSuccess(false);
+        setFormData({
+          firstName: '', lastName: '', dob: '', residentialAddress: '',
+          postalCode: '', mobileNumber: '', emailAddress: '', companyName: '', 
+          partnerName: '', partnerDob: '', partnerPhone: '', partnerEmail: ''
+        });
+        setHasPartner(false);
+        onSuccess();
+      }, 1200);
     } catch (err: any) {
       if (err.name === 'ZodError') {
         const fieldErrors: Record<string, string> = {};

@@ -3,14 +3,30 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PlusCircle, LayoutDashboard, Hexagon } from 'lucide-react';
 import LeadCaptureForm from './components/LeadCaptureForm';
 import LeadDashboard from './components/LeadDashboard';
 import { PWAInstallButton } from './components/PWAInstallButton';
+import { WorkspaceHeader } from './components/WorkspaceHeader';
+import { workspaceService } from './services/workspaceService';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'capture' | 'dashboard'>('capture');
+  const [activeTab, setActiveTab] = useState<'capture' | 'dashboard'>('dashboard');
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    // Check if the user navigated here via a cross-device pairing link
+    workspaceService.checkAndApplyPairingHash().then(ws => {
+      if (ws) {
+        setRefreshKey(k => k + 1);
+      }
+    });
+  }, []);
+
+  const handleWorkspaceChanged = () => {
+    setRefreshKey(k => k + 1);
+  };
 
   return (
     <div className="min-h-screen bg-zinc-50 font-sans text-zinc-900 selection:bg-blue-100 selection:text-emerald-900">
@@ -56,13 +72,16 @@ export default function App() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {/* Workspace Switcher & Sync Status */}
+        <WorkspaceHeader onWorkspaceChanged={handleWorkspaceChanged} />
+
         {activeTab === 'capture' ? (
           <div className="max-w-3xl mx-auto">
             <LeadCaptureForm onSuccess={() => setActiveTab('dashboard')} />
           </div>
         ) : (
-          <LeadDashboard />
+          <LeadDashboard key={refreshKey} />
         )}
       </main>
     </div>
