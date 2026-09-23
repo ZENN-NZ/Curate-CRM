@@ -154,8 +154,39 @@ export const leadService = {
     }
 
     const wsId = workspaceService.getActiveWorkspaceId();
+    if (!wsId) {
+      return { status: 'offline', pushedCount: 0, pulledCount: 0, message: 'No active workspace selected' };
+    }
 
     try {
+      const ws = await workspaceService.getActiveWorkspace();
+      if (!ws) {
+        return { status: 'offline', pushedCount: 0, pulledCount: 0, message: 'Active workspace not found' };
+      }
+
+      // 0. ENSURE WORKSPACE EXISTS IN SUPABASE (prevents foreign-key constraint violation on leads table)
+      const { error: wsUpsertError } = await supabase.from('workspaces').upsert({
+        id: ws.id,
+        name: ws.name,
+        passkey: ws.passkey,
+        owner_email: ws.ownerEmail || null,
+        owner_id: ws.ownerId || null,
+        created_at: ws.createdAt || new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'id' });
+
+      if (wsUpsertError) {
+        if (wsUpsertError.code === '42P01' || wsUpsertError.message?.includes('does not exist')) {
+          return {
+            status: 'error',
+            pushedCount: 0,
+            pulledCount: 0,
+            message: 'Database tables missing in Supabase. Please run supabase/schema.sql in your Supabase SQL Editor.'
+          };
+        }
+        throw wsUpsertError;
+      }
+
       // 1. PUSH: Send local pending changes
       const pending = await localDb.leads
         .where('workspaceId')
@@ -186,7 +217,17 @@ export const leadService = {
         }));
 
         const { error } = await supabase.from('leads').upsert(payload, { onConflict: 'id' });
-        if (error) throw error;
+        if (error) {
+          if (error.code === '42P01' || error.message?.includes('does not exist')) {
+            return {
+              status: 'error',
+              pushedCount: 0,
+              pulledCount: 0,
+              message: 'Database tables missing in Supabase. Please run supabase/schema.sql in your Supabase SQL Editor.'
+            };
+          }
+          throw error;
+        }
 
         // Mark as synced locally
         for (const item of pending) {
@@ -197,7 +238,6 @@ export const leadService = {
       }
 
       // 2. PULL: Fetch remote updates
-      const ws = await workspaceService.getActiveWorkspace();
       let query = supabase.from('leads').select('*').eq('workspace_id', wsId);
 
       if (ws.lastSyncedAt) {
@@ -205,7 +245,17 @@ export const leadService = {
       }
 
       const { data: remoteRows, error: pullError } = await query;
-      if (pullError) throw pullError;
+      if (pullError) {
+        if (pullError.code === '42P01' || pullError.message?.includes('does not exist')) {
+          return {
+            status: 'error',
+            pushedCount,
+            pulledCount: 0,
+            message: 'Database tables missing in Supabase. Please run supabase/schema.sql in your Supabase SQL Editor.'
+          };
+        }
+        throw pullError;
+      }
 
       let pulledCount = 0;
       if (remoteRows && remoteRows.length > 0) {
@@ -247,7 +297,11 @@ export const leadService = {
       return { status: 'synced', pushedCount, pulledCount };
     } catch (err: any) {
       console.error('Supabase sync error:', err);
-      return { status: 'error', pushedCount: 0, pulledCount: 0, message: err.message };
+      const isMissingTable = err.code === '42P01' || err.message?.includes('does not exist');
+      const msg = isMissingTable
+        ? 'Database tables missing in Supabase. Please run supabase/schema.sql in your Supabase SQL Editor.'
+        : err.message || 'Sync failed';
+      return { status: 'error', pushedCount: 0, pulledCount: 0, message: msg };
     }
   }
 };

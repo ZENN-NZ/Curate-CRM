@@ -9,8 +9,8 @@
 ## Process
 1. Verify the React 19 + Tailwind CSS v4 frontend component structure in `src/`.
 2. Inspect the responsive layout across desktop and mobile form factors:
-   - `OnboardingScreen`: First-time startup gate for creating (with email OTP verification) or joining a workspace.
-   - Header with navigation tabs and `PWAInstallButton`.
+   - `OnboardingScreen`: 3-mode startup gate: Sign In & Reconnect (with email OTP & workspace discovery), Create New Business, and Pair Device.
+   - `WorkspaceHeader`: Responsive bar with business workspace switcher, live cloud/local sync status, pairing modal, and Supabase diagnostics modal (with table health checks and schema copier).
    - `LeadCaptureForm`: Multi-field contact form with partner disclosure toggle and real-time field error indicators.
    - `LeadDashboard`: Searchable directory with live filter, edit modal, and Excel download action.
 3. Validate PWA configuration (`manifest.json` and install prompt hooks).

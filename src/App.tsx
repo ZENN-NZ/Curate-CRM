@@ -32,6 +32,19 @@ export default function App() {
       workspaceService.hasActiveWorkspace().then(exists => {
         setHasWorkspace(exists);
         setIsLoadingWorkspace(false);
+      }).catch(err => {
+        console.error('Error checking active workspace:', err);
+        setHasWorkspace(false);
+        setIsLoadingWorkspace(false);
+      });
+    }).catch(err => {
+      console.error('Error processing pairing hash:', err);
+      workspaceService.hasActiveWorkspace().then(exists => {
+        setHasWorkspace(exists);
+        setIsLoadingWorkspace(false);
+      }).catch(() => {
+        setHasWorkspace(false);
+        setIsLoadingWorkspace(false);
       });
     });
   }, []);

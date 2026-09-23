@@ -13,11 +13,23 @@
 
 ## Component Hierarchy & Features Verified
 
-### 1. Application Shell (`src/App.tsx`)
+### 1. Application Shell & Multi-Tenant Controls (`src/App.tsx`, `WorkspaceHeader.tsx`)
 - Responsive sticky header with hexagon branding, PWA Install action button, and tab switches (`Add Contact` / `Dashboard`).
 - Mobile adaptive navigation hiding text labels gracefully on compact screens (<360px).
+- **WorkspaceHeader Controls**:
+  - Instantaneous multi-business switcher with active tenant indicator.
+  - Zero-login device pairing modal (`/#sync=id:passkey`).
+  - Supabase Cloud Diagnostics modal: displays live connection source (`Vercel Integration` vs `In-App`), endpoint health, table verification, and one-click "Copy schema.sql" tool.
+- **Resilient App Boot**: Automatic fallback inspection of IndexedDB if `localStorage` was cleared, plus `.catch()` error bounds preventing infinite loading.
 
-### 2. Lead Capture Portal (`src/components/LeadCaptureForm.tsx`)
+### 2. Smart Onboarding & Business Reconnect Gate (`src/components/OnboardingScreen.tsx`)
+- Three distinct access modes:
+  1. **Sign In**: Owner enters email -> verifies OTP -> queries remote Supabase + local Dexie -> displays all owned workspaces with one-click restore and immediate lead delta pull.
+  2. **New Business**: Business name + Owner email -> verifies OTP -> cryptographic workspace creation.
+  3. **Pair Code**: Frictionless office-to-phone pairing with instant contact synchronization.
+- Real-time connection badge: `Cloud Synced` vs `Local Device Mode`.
+
+### 3. Lead Capture Portal (`src/components/LeadCaptureForm.tsx`)
 - Multi-section contact capture form:
   - Personal identification (`firstName`, `lastName`, `dob`).
   - Contact and location details (`residentialAddress`, `postalCode`, `mobileNumber`, `emailAddress`, `companyName`).
@@ -25,17 +37,17 @@
 - Client-side validation: Evaluates inputs through `LeadSchema` before dispatching network requests.
 - Inline visual error indicators and submission status feedback (animated loading spinner and success alert).
 
-### 3. Contact Directory Dashboard (`src/components/LeadDashboard.tsx`)
+### 4. Contact Directory Dashboard (`src/components/LeadDashboard.tsx`)
 - Search & Filter bar: Real-time query matching against contact names, phone numbers, addresses, emails, and company names.
 - Dual-mode presentation: Full-width data table for desktop viewports and touch-friendly cards for mobile devices.
 - In-place Contact Editing: Modal dialog for updating existing lead profiles with automated directory refresh.
-- Excel Export Trigger: One-click streaming download of formatted `.xlsx` workbook via `/api/leads/export`.
+- Excel Export Trigger: One-click streaming download of formatted `.xlsx` workbook via client-side ExcelJS with formula injection escaping.
 
-### 4. Progressive Web App (PWA) Integration (`src/components/PWAInstallButton.tsx`, `usePWAInstall.ts`)
+### 5. Progressive Web App (PWA) Integration (`src/components/PWAInstallButton.tsx`, `usePWAInstall.ts`)
 - `beforeinstallprompt` event interception enabling in-app prompt presentation.
 - Manifest configuration providing standalone display mode and theme tinting.
 
 ## Review Gate Sign-off
-- **Component Architecture**: VERIFIED
+- **Component Architecture**: VERIFIED (3-Mode Onboarding + Diagnostics Header)
 - **Client Validation Alignment**: VERIFIED (matches Layer 3 `data_schema.json`)
-- **PWA Integration**: VERIFIED
+- **PWA & Build Integration**: VERIFIED (Vite build passed with Vercel Supabase bridge)

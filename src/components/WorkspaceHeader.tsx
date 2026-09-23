@@ -11,12 +11,73 @@ import {
   CloudOff, 
   ShieldCheck, 
   Database, 
-  X 
+  X,
+  AlertTriangle,
+  CheckCircle2,
+  Sparkles,
+  ExternalLink
 } from 'lucide-react';
 import { workspaceService } from '../services/workspaceService';
 import { leadService } from '../services/leadService';
-import { isSupabaseConfigured, configureSupabase } from '../lib/supabase';
+import { 
+  isSupabaseConfigured, 
+  configureSupabase, 
+  getSupabaseConfig, 
+  checkSupabaseHealth, 
+  type SupabaseHealthResult, 
+  type SupabaseConfigInfo 
+} from '../lib/supabase';
 import type { Workspace } from '../types';
+
+const SUPABASE_SCHEMA_SQL = `-- Curate CRM: Multi-Tenant Cloud Schema for Supabase
+-- Run this in your Supabase Dashboard: SQL Editor -> New Query -> Run
+
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+CREATE TABLE IF NOT EXISTS workspaces (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  passkey TEXT,
+  owner_email TEXT,
+  owner_id UUID,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS leads (
+  id UUID PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  first_name TEXT NOT NULL,
+  last_name TEXT NOT NULL,
+  dob TEXT NOT NULL,
+  residential_address TEXT NOT NULL,
+  postal_code TEXT NOT NULL,
+  mobile_number TEXT NOT NULL,
+  email_address TEXT NOT NULL,
+  company_name TEXT,
+  partner_name TEXT,
+  partner_dob TEXT,
+  partner_phone TEXT,
+  partner_email TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  is_deleted BOOLEAN DEFAULT FALSE
+);
+
+CREATE INDEX IF NOT EXISTS idx_leads_workspace_updated ON leads (workspace_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_leads_workspace_active ON leads (workspace_id, is_deleted);
+CREATE INDEX IF NOT EXISTS idx_leads_search ON leads (workspace_id, last_name, email_address);
+CREATE INDEX IF NOT EXISTS idx_workspaces_owner ON workspaces (owner_email);
+
+ALTER TABLE workspaces ENABLE ROW LEVEL SECURITY;
+ALTER TABLE leads ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow workspace scoped select" ON leads FOR SELECT USING (true);
+CREATE POLICY "Allow workspace scoped insert" ON leads FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow workspace scoped update" ON leads FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Allow workspace select" ON workspaces FOR SELECT USING (true);
+CREATE POLICY "Allow workspace insert" ON workspaces FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow workspace update" ON workspaces FOR UPDATE USING (true);`;
 
 interface WorkspaceHeaderProps {
   onWorkspaceChanged: () => void;
@@ -34,6 +95,12 @@ export function WorkspaceHeader({ onWorkspaceChanged }: WorkspaceHeaderProps) {
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'offline' | 'error'>('offline');
   const [syncMessage, setSyncMessage] = useState('');
   const [copied, setCopied] = useState(false);
+  const [schemaCopied, setSchemaCopied] = useState(false);
+
+  // Supabase Diagnostics states
+  const [configInfo, setConfigInfo] = useState<SupabaseConfigInfo | null>(null);
+  const [healthStatus, setHealthStatus] = useState<SupabaseHealthResult | null>(null);
+  const [isCheckingHealth, setIsCheckingHealth] = useState(false);
 
   // Form states
   const [newWsName, setNewWsName] = useState('');
@@ -78,6 +145,30 @@ export function WorkspaceHeader({ onWorkspaceChanged }: WorkspaceHeaderProps) {
     }
   };
 
+  const handleOpenSupabaseModal = async () => {
+    const cfg = getSupabaseConfig();
+    setConfigInfo(cfg);
+    setSbUrl(cfg.url);
+    setSbKey(cfg.anonKey);
+    setShowSupabaseModal(true);
+
+    if (cfg.isConfigured) {
+      setIsCheckingHealth(true);
+      const health = await checkSupabaseHealth();
+      setHealthStatus(health);
+      setIsCheckingHealth(false);
+    } else {
+      setHealthStatus(null);
+    }
+  };
+
+  const handleRunHealthCheck = async () => {
+    setIsCheckingHealth(true);
+    const health = await checkSupabaseHealth();
+    setHealthStatus(health);
+    setIsCheckingHealth(false);
+  };
+
   const handleSwitchWorkspace = (id: string) => {
     workspaceService.setActiveWorkspaceId(id);
     setIsMenuOpen(false);
@@ -97,11 +188,16 @@ export function WorkspaceHeader({ onWorkspaceChanged }: WorkspaceHeaderProps) {
     onWorkspaceChanged();
   };
 
-  const handleSaveSupabase = (e: React.FormEvent) => {
+  const handleSaveSupabase = async (e: React.FormEvent) => {
     e.preventDefault();
     if (sbUrl && sbKey) {
       configureSupabase(sbUrl.trim(), sbKey.trim());
-      setShowSupabaseModal(false);
+      const cfg = getSupabaseConfig();
+      setConfigInfo(cfg);
+      setIsCheckingHealth(true);
+      const health = await checkSupabaseHealth();
+      setHealthStatus(health);
+      setIsCheckingHealth(false);
       triggerSync();
     }
   };
@@ -112,6 +208,12 @@ export function WorkspaceHeader({ onWorkspaceChanged }: WorkspaceHeaderProps) {
     navigator.clipboard.writeText(pairingLink);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const copySchemaSql = () => {
+    navigator.clipboard.writeText(SUPABASE_SCHEMA_SQL);
+    setSchemaCopied(true);
+    setTimeout(() => setSchemaCopied(false), 2500);
   };
 
   return (
@@ -163,18 +265,30 @@ export function WorkspaceHeader({ onWorkspaceChanged }: WorkspaceHeaderProps) {
         {/* Sync Status Badge */}
         <button
           onClick={triggerSync}
-          title={syncMessage || 'Click to sync now'}
-          className="flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-300 hover:text-white transition-colors"
+          title={syncMessage || (syncStatus === 'error' ? 'Sync error: click to retry' : 'Click to sync now')}
+          className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full border transition-colors ${
+            syncStatus === 'error' 
+              ? 'bg-amber-950/40 border-amber-800/60 text-amber-300 hover:bg-amber-900/50' 
+              : 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:text-white'
+          }`}
         >
           {syncStatus === 'syncing' ? (
             <RefreshCw className="w-3.5 h-3.5 text-yellow-400 animate-spin" />
           ) : syncStatus === 'synced' ? (
             <Cloud className="w-3.5 h-3.5 text-emerald-400" />
+          ) : syncStatus === 'error' ? (
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
           ) : (
             <CloudOff className="w-3.5 h-3.5 text-zinc-400" />
           )}
           <span className="hidden sm:inline">
-            {syncStatus === 'synced' ? 'Cloud Synced' : syncStatus === 'syncing' ? 'Syncing...' : 'Local Device'}
+            {syncStatus === 'synced' 
+              ? 'Cloud Synced' 
+              : syncStatus === 'syncing' 
+              ? 'Syncing...' 
+              : syncStatus === 'error'
+              ? 'Sync Warning'
+              : 'Local Device'}
           </span>
         </button>
 
@@ -190,11 +304,14 @@ export function WorkspaceHeader({ onWorkspaceChanged }: WorkspaceHeaderProps) {
 
         {/* Supabase Config Button */}
         <button
-          onClick={() => setShowSupabaseModal(true)}
-          className="p-1.5 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded-lg transition-colors"
-          title="Supabase Cloud Settings"
+          onClick={handleOpenSupabaseModal}
+          className="p-1.5 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded-lg transition-colors relative"
+          title="Supabase Cloud Settings & Diagnostics"
         >
           <Database className="w-4 h-4" />
+          {isSupabaseConfigured() && (
+            <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-emerald-400 rounded-full" />
+          )}
         </button>
       </div>
 
@@ -304,25 +421,100 @@ export function WorkspaceHeader({ onWorkspaceChanged }: WorkspaceHeaderProps) {
         </div>
       )}
 
-      {/* Supabase Configuration Modal */}
+      {/* Supabase Configuration & Diagnostics Modal */}
       {showSupabaseModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-md w-full p-6 text-zinc-100 shadow-2xl">
-            <div className="flex justify-between items-center mb-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-lg w-full p-6 text-zinc-100 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-3">
               <h3 className="text-lg font-bold flex items-center">
                 <Database className="w-5 h-5 mr-2 text-emerald-400" />
-                Supabase Cloud Settings
+                Supabase Cloud Settings & Diagnostics
               </h3>
               <button onClick={() => setShowSupabaseModal(false)} className="text-zinc-400 hover:text-white">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveSupabase}>
-              <p className="text-sm text-zinc-400 mb-4 leading-relaxed">
-                Connect your Supabase project to enable background cloud backup, cross-device sync, and multi-user team collaboration.
-              </p>
+            {/* Connection Source Badge */}
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-zinc-800">
+              <span className="text-xs text-zinc-400">Connection Source:</span>
+              {configInfo?.source === 'vercel_env' ? (
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-950/60 text-blue-300 border border-blue-800/40">
+                  <Sparkles className="w-3 h-3 mr-1 text-blue-400" />
+                  Auto-detected via Vercel Integration
+                </span>
+              ) : configInfo?.source === 'localStorage' ? (
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-950/60 text-emerald-300 border border-emerald-800/40">
+                  In-App Browser Credentials
+                </span>
+              ) : (
+                <span className="text-xs text-zinc-500 italic">Not Connected</span>
+              )}
+            </div>
 
+            {/* Live Health Status Alert */}
+            {isCheckingHealth ? (
+              <div className="p-3 bg-zinc-800/60 border border-zinc-700/60 rounded-xl text-xs text-zinc-300 flex items-center mb-4">
+                <RefreshCw className="w-4 h-4 mr-2 animate-spin text-blue-400" />
+                <span>Checking Supabase connection & database tables...</span>
+              </div>
+            ) : healthStatus ? (
+              <div className="mb-4">
+                {healthStatus.status === 'ready' && (
+                  <div className="p-3 bg-emerald-950/40 border border-emerald-800/60 rounded-xl text-xs text-emerald-300 flex items-start space-x-2">
+                    <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-400" />
+                    <div>
+                      <p className="font-semibold text-emerald-200">Supabase Connected & Active</p>
+                      <p className="mt-0.5 text-emerald-300/90">{healthStatus.message}</p>
+                    </div>
+                  </div>
+                )}
+
+                {healthStatus.status === 'missing_tables' && (
+                  <div className="p-3.5 bg-amber-950/50 border border-amber-800/60 rounded-xl text-xs text-amber-200">
+                    <div className="flex items-start space-x-2 mb-2">
+                      <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-400" />
+                      <div>
+                        <p className="font-bold text-amber-100">Database Tables Missing</p>
+                        <p className="mt-0.5 text-amber-200/90">
+                          Vercel connected your Supabase project, but the database tables have not been created yet. Run the SQL schema once in your Supabase dashboard:
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 mt-3">
+                      <button
+                        type="button"
+                        onClick={copySchemaSql}
+                        className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-colors shadow-sm"
+                      >
+                        {schemaCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                        <span>{schemaCopied ? 'Schema SQL Copied!' : 'Copy schema.sql'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleRunHealthCheck}
+                        className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg text-xs font-medium transition-colors"
+                      >
+                        Re-check Tables
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {healthStatus.status === 'auth_error' && (
+                  <div className="p-3 bg-red-950/40 border border-red-800/60 rounded-xl text-xs text-red-300 flex items-start space-x-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-red-400" />
+                    <div>
+                      <p className="font-semibold text-red-200">Authentication Error</p>
+                      <p className="mt-0.5">{healthStatus.message}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            {/* Supabase URL and Key Form */}
+            <form onSubmit={handleSaveSupabase}>
               <div className="mb-4">
                 <label className="text-xs text-zinc-300 font-medium block mb-1">Project URL</label>
                 <input
@@ -341,25 +533,37 @@ export function WorkspaceHeader({ onWorkspaceChanged }: WorkspaceHeaderProps) {
                   placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6..."
                   value={sbKey}
                   onChange={(e) => setSbKey(e.target.value)}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono"
                 />
               </div>
 
-              <div className="flex justify-end space-x-2">
+              <div className="flex items-center justify-between pt-2">
                 <button
                   type="button"
-                  onClick={() => setShowSupabaseModal(false)}
-                  className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-xl text-sm font-medium transition-colors"
+                  onClick={handleRunHealthCheck}
+                  disabled={!sbUrl || !sbKey || isCheckingHealth}
+                  className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-300 rounded-xl text-xs font-medium flex items-center space-x-1.5 transition-colors"
                 >
-                  Close
+                  <RefreshCw className={`w-3.5 h-3.5 ${isCheckingHealth ? 'animate-spin' : ''}`} />
+                  <span>Test Connection</span>
                 </button>
-                <button
-                  type="submit"
-                  disabled={!sbUrl || !sbKey}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-colors"
-                >
-                  Save & Connect
-                </button>
+
+                <div className="flex space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowSupabaseModal(false)}
+                    className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-xl text-sm font-medium transition-colors"
+                  >
+                    Close
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!sbUrl || !sbKey}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-colors"
+                  >
+                    Save & Reconnect
+                  </button>
+                </div>
               </div>
             </form>
           </div>

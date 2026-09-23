@@ -34,20 +34,103 @@ export const workspaceService = {
 
   async hasActiveWorkspace(): Promise<boolean> {
     const id = this.getActiveWorkspaceId();
-    if (!id) return false;
-    const ws = await localDb.workspaces.get(id);
-    return !!ws;
+    if (id) {
+      const ws = await localDb.workspaces.get(id);
+      if (ws) return true;
+    }
+    // Storage recovery fallback: If localStorage was cleared or ephemeral,
+    // check if local IndexedDB has existing workspaces.
+    const all = await localDb.workspaces.toArray();
+    if (all.length > 0) {
+      // Auto-restore the most recent workspace
+      const mostRecent = all[all.length - 1];
+      this.setActiveWorkspaceId(mostRecent.id);
+      return true;
+    }
+    return false;
   },
 
   async getActiveWorkspace(): Promise<Workspace | null> {
     const id = this.getActiveWorkspaceId();
-    if (!id) return null;
-    const ws = await localDb.workspaces.get(id);
-    return ws || null;
+    if (id) {
+      const ws = await localDb.workspaces.get(id);
+      if (ws) return ws;
+    }
+    // Fallback: auto-recover from IndexedDB if any workspace exists
+    const all = await localDb.workspaces.toArray();
+    if (all.length > 0) {
+      const mostRecent = all[all.length - 1];
+      this.setActiveWorkspaceId(mostRecent.id);
+      return mostRecent;
+    }
+    return null;
   },
 
   async getAllWorkspaces(): Promise<Workspace[]> {
     return await localDb.workspaces.toArray();
+  },
+
+  /**
+   * Find all workspaces belonging to an email address (locally and in Supabase)
+   */
+  async findWorkspacesByOwner(email: string): Promise<Workspace[]> {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) return [];
+
+    const found: Workspace[] = [];
+
+    // 1. Check local IndexedDB first
+    const allLocal = await localDb.workspaces.toArray();
+    for (const ws of allLocal) {
+      if (ws.ownerEmail && ws.ownerEmail.toLowerCase() === cleanEmail) {
+        found.push(ws);
+      }
+    }
+
+    // 2. Query Supabase if configured
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('workspaces')
+          .select('*')
+          .ilike('owner_email', cleanEmail);
+
+        if (!error && data && data.length > 0) {
+          for (const row of data) {
+            const mapped: Workspace = {
+              id: row.id,
+              name: row.name,
+              passkey: row.passkey || generatePasskey(),
+              ownerEmail: row.owner_email,
+              ownerId: row.owner_id,
+              createdAt: row.created_at,
+            };
+            // Cache in local Dexie
+            await localDb.workspaces.put(mapped);
+            if (!found.some(w => w.id === mapped.id)) {
+              found.push(mapped);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Could not query remote workspaces:', err);
+      }
+    }
+
+    return found;
+  },
+
+  /**
+   * Connect and activate an existing workspace, triggering initial sync
+   */
+  async connectWorkspace(workspace: Workspace): Promise<void> {
+    await localDb.workspaces.put(workspace);
+    this.setActiveWorkspaceId(workspace.id);
+
+    // Pull leads in background
+    import('./leadService').then(m => {
+      m.leadService.syncWithSupabase().catch(() => {});
+    }).catch(() => {});
   },
 
   /**
@@ -176,6 +259,9 @@ export const workspaceService = {
       } catch (_) {}
     }
 
+    // Pull leads for newly joined workspace
+    import('./leadService').then(m => m.leadService.syncWithSupabase().catch(() => {}));
+
     return ws;
   },
 
@@ -193,6 +279,8 @@ export const workspaceService = {
       if (id && passkey) {
         const ws = await this.joinWorkspace(id, passkey);
         window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        // Pull leads for newly joined workspace
+        import('./leadService').then(m => m.leadService.syncWithSupabase().catch(() => {}));
         return ws;
       }
     }
